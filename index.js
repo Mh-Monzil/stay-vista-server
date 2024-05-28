@@ -48,6 +48,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     const roomCollection = client.db("stayVista").collection("rooms");
+    const usersCollection = client.db("stayVista").collection("users");
 
     // auth related api
     app.post("/jwt", async (req, res) => {
@@ -79,11 +80,46 @@ async function run() {
       }
     });
 
+    //save user data in db
+    app.put("/user", async (req, res) => {
+      const user = req.body;
+      const query = {email: user?.email}
+      //check if user already exists in db
+      const isExist = await usersCollection.findOne(query);
+      if(isExist) return res.send(isExist);
+
+      const options = { upsert: true };
+      const filter = {email: user?.email}
+      const updateDoc = {
+        $set: {
+          ...user,
+          timeStamp: Date.now(),
+        }
+      }
+      const result = await usersCollection.updateOne(filter, updateDoc, options);
+      res.send(result);
+    });
+
+    //save a room data
+    app.post("/room", async (req, res) => {
+      const roomData = req.body;
+      const result = await roomCollection.insertOne(roomData);
+      res.send(result);
+    });
+
     // Get all rooms
     app.get("/rooms", async (req, res) => {
       const category = req.query.category;
       let query = {};
-      if (category && category !== 'null') query = { category };
+      if (category && category !== "null") query = { category };
+      const result = await roomCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    //get all rooms for host
+    app.get("/my-listings/:email", async (req, res) => {
+      const email = req.params.email;
+      let query = { "host.email": email };
       const result = await roomCollection.find(query).toArray();
       res.send(result);
     });
@@ -95,7 +131,13 @@ async function run() {
       res.send(result);
     });
 
-    //
+    //delete a room
+    app.delete("/room/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await roomCollection.deleteOne(query);
+      res.send(result);
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
